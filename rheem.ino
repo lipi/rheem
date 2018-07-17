@@ -19,23 +19,40 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <PrintEx.h>
+#include <Timer.h>
 
 #define REVISION 1
+
+// heat exchanger inpu and output tempreature sensors
+DeviceAddress HeatExInAddr = { 0x28, 0xFF, 0xA7, 0x67, 0x70, 0x17, 0x03, 0xB3 }; // A1-2
+DeviceAddress HeatExOutAddr = { 0x28, 0xFF, 0x8C, 0x25, 0x71, 0x17, 0x03, 0x77 }; // A1-4
+
+// hot-water cylinder top and bottom temperature sensors
+DeviceAddress HWC_TopAddr = { 0x28, 0xFF, 0x56, 0xE9, 0x70, 0x17, 0x03, 0x14 }; // A1-1
+DeviceAddress HWC_BottomAddr = { 0x28, 0xFF, 0x70, 0x20, 0x71, 0x17, 0x03, 0x71 }; // A1-3
+
+// outputs
+const int heaterPin = 3;      // relay
+const int compressorPin = 10; // relay
+const int pumpPin = 13;       // solid-state relay
 
 PrintEx exSerial = Serial;
 LiquidCrystal lcd( 8, 9, 4, 5, 6, 7 );
 OneWire ow(2);
 DallasTemperature sensors(&ow);
+Timer timer;
+const float dutyMinimum = 0.1;
+const int periodMsec = 1000;
+int pulseMsec = 0;
 
-DeviceAddress HeatExInAddr = { 0x28, 0xFF, 0xA7, 0x67, 0x70, 0x17, 0x03, 0xB3 }; // A1-2
-DeviceAddress HeatExOutAddr = { 0x28, 0xFF, 0x8C, 0x25, 0x71, 0x17, 0x03, 0x77 }; // A1-4
-DeviceAddress HWC_TopAddr = { 0x28, 0xFF, 0x56, 0xE9, 0x70, 0x17, 0x03, 0x14 }; // A1-1
-DeviceAddress HWC_BottomAddr = { 0x28, 0xFF, 0x70, 0x20, 0x71, 0x17, 0x03, 0x71 }; // A1-3
+float hexInTemp;
+float hexOutTemp;
+float hwcTopTemp;
+float hwcBottomTemp;
 
-// outputs
-const int compressorPin = 10;
-const int ledPin = 13;
-const int heaterPin = 3;
+bool pumpOn;
+bool compressorOn;
+bool heaterOn;
 
 uint8_t findDevices(OneWire ow) {
   uint8_t address[8];
@@ -84,40 +101,121 @@ void selfTest() {
   exSerial.printf("%d of %d devices found: %s\n",  count, 4, count == 4 ? "OK" : "FAIL");
 
   // test 3: relays
+  testOutput(pumpPin, "LED");
   testOutput(compressorPin, "compressor relay");
   testOutput(heaterPin, "heater relay");
-  testOutput(ledPin, "LED");
 }
-  
+
 void setup() {
   lcd.begin(16, 2);
 
   Serial.begin(9600);
 
+  pinMode(pumpPin, OUTPUT);
   pinMode(compressorPin, OUTPUT);
-  pinMode(ledPin, OUTPUT);
   pinMode(heaterPin, OUTPUT);  
   
-  selfTest();
+  //selfTest();
 
   sensors.begin();
   sensors.setResolution(HeatExInAddr, 10);
   sensors.setResolution(HeatExOutAddr, 10);
   sensors.setResolution(HWC_TopAddr, 10);
   sensors.setResolution(HWC_BottomAddr, 10);
+
+  timer.every(periodMsec, onEvery, NULL);
 }
 
-void printTemperatures(DallasTemperature sensors) {
+void measureTemperatures() {
   sensors.requestTemperatures(); 
-  float hexIn = sensors.getTempC(HeatExInAddr);
-  float hexOut = sensors.getTempC(HeatExOutAddr);
-  float hwcTop = sensors.getTempC(HWC_TopAddr);
-  float hwcBottom = sensors.getTempC(HWC_BottomAddr);
-  exSerial.printf("Heat Exchanger in/out : %.2f/%.2f Celsius  ", hexIn, hexOut);
-  exSerial.printf("Hot Water Cylinder top/bottom: %.2f/%.2f Celsius\n", hwcTop, hwcBottom);
+
+  //TODO: use average of last N readings
+  
+  hexInTemp = sensors.getTempC(HeatExInAddr);
+  hexOutTemp = sensors.getTempC(HeatExOutAddr);
+  hwcTopTemp = sensors.getTempC(HWC_TopAddr);
+  hwcBottomTemp = sensors.getTempC(HWC_BottomAddr);
+  
+  exSerial.printf("Heat Exchanger in/out : %.2f/%.2f Celsius  ", hexInTemp, hexOutTemp);
+  exSerial.printf("Hot Water Cylinder top/bottom: %.2f/%.2f Celsius\n", hwcTopTemp, hwcBottomTemp);
+}
+
+void setDutyCycle(float dutyCycle) {
+  Serial.println(dutyCycle);
+  // pump may never completely stop, otherwise 
+  // couldn't measure the output of the heat exchanger
+  if (dutyCycle < dutyMinimum) {dutyCycle = dutyMinimum;}
+  if (dutyCycle > 1.0) {dutyCycle = 1.0;}
+  pulseMsec = periodMsec * dutyCycle;
+  exSerial.printf("pump duty cycle: %.2f (%d of %d msec)\n", dutyCycle, pulseMsec, periodMsec);
+}
+
+void incrementDutyCycle() {
+  float dutyCycle = (float)pulseMsec / (float)periodMsec;
+  dutyCycle = dutyCycle + 0.01;
+  setDutyCycle(dutyCycle);
+}
+
+void decrementDutyCycle() {
+  float dutyCycle = (float)pulseMsec / (float)periodMsec;
+  dutyCycle = dutyCycle - 0.01;
+  setDutyCycle(dutyCycle);
+}
+
+void startCompressor() {digitalWrite(compressorPin, HIGH); compressorOn = true;}
+void stopCompressor() {digitalWrite(compressorPin, LOW); compressorOn = false;}
+void startHeater() {digitalWrite(heaterPin, HIGH); heaterOn = true;}
+void stopHeater() {digitalWrite(heaterPin, LOW); heaterOn = false;}
+void startPump() {setDutyCycle(0.1); pumpOn = true;}
+void stopPump() {setDutyCycle(0); pumpOn = false;}
+
+void calculateOutputs() {
+    
+  if (hexInTemp >= 45.0) {
+    if ( compressorOn || heaterOn) {
+      exSerial.printf("Heat exchanger input too hot, stopping all heaters\n");
+      stopCompressor();
+      stopHeater();
+      stopPump();
+    }
+
+    // too hot, nothing to do
+    return;
+  }
+
+  if (hwcBottomTemp < 45.0 && !compressorOn) {
+    exSerial.printf("Hot-water cylinder bottom too cold, starting compressor\n");
+    startCompressor(); // will take a while to start heating...
+    //TODO: start heater if ambient temperature low
+    startPump();
+    return;
+  }
+
+  if (hexOutTemp < 62.0 ) {
+    exSerial.printf("Heat exchanger output too cold, reducing pump speed\n");
+    // shorter bursts of pumping --> less water to heat --> higher temperature 
+    decrementDutyCycle();
+  }
+   
+  // if temperature is exactly 62.0 Celsius: do not change 
+  
+  if (hexOutTemp > 62.0) {
+    exSerial.printf("Heat exchanger output too hot, increasing pump speed\n");
+    // longer bursts of pumping --> more water to heat --> lower temperature
+    incrementDutyCycle();
+  }
+}
+
+void onEvery(void* context) {
+  // first start the pulse, to avoid being affected 
+  // by time taken by temperature measurement, printing, etc.
+  timer.pulseImmediate(pumpPin, pulseMsec, LOW);
+  
+  measureTemperatures();
+  calculateOutputs();
 }
 
 void loop() {
-    printTemperatures(sensors);  
-    delay(1000);
+  timer.update();
 }
+
