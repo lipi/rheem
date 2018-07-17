@@ -141,7 +141,6 @@ void measureTemperatures() {
 }
 
 void setDutyCycle(float dutyCycle) {
-  Serial.println(dutyCycle);
   // pump may never completely stop, otherwise 
   // couldn't measure the output of the heat exchanger
   if (dutyCycle < dutyMinimum) {dutyCycle = dutyMinimum;}
@@ -171,7 +170,7 @@ void stopPump() {setDutyCycle(0); pumpOn = false;}
 
 void calculateOutputs() {
     
-  if (hexInTemp >= 45.0) {
+  if (hexInTemp >= 45.0 || hwcBottomTemp >= 45.0) {
     if ( compressorOn || heaterOn) {
       exSerial.printf("Heat exchanger input too hot, stopping all heaters\n");
       stopCompressor();
