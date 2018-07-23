@@ -41,8 +41,8 @@ LiquidCrystal lcd( 8, 9, 4, 5, 6, 7 );
 OneWire ow(2);
 DallasTemperature sensors(&ow);
 Timer timer;
-const float dutyMinimum = 0.1;
-const int periodMsec = 1000;
+const float dutyMinimum = 0.01;
+const int periodMsec = 5000;
 int pulseMsec = 0;
 
 float hexInTemp;
@@ -109,7 +109,7 @@ void selfTest() {
 void setup() {
   lcd.begin(16, 2);
 
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   pinMode(pumpPin, OUTPUT);
   pinMode(compressorPin, OUTPUT);
@@ -138,7 +138,20 @@ void measureTemperatures() {
   
   exSerial.printf("Heat Exchanger in/out : %.2f/%.2f Celsius  ", hexInTemp, hexOutTemp);
   exSerial.printf("Hot Water Cylinder top/bottom: %.2f/%.2f Celsius\n", hwcTopTemp, hwcBottomTemp);
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("HEX:");
+  //lcd.print(hwcBottomTemp); lcd.print(" ");
+  //lcd.print(hwcTopTemp); lcd.print(" ");
+  lcd.print(hexInTemp); lcd.print(" ");
+  lcd.print(hexOutTemp);
+
+  lcd.setCursor(0,1);
+  lcd.print("Duty:");
+  lcd.print((float)pulseMsec / (float)periodMsec);
 }
+
 
 void setDutyCycle(float dutyCycle) {
   // pump may never completely stop, otherwise 
@@ -149,15 +162,19 @@ void setDutyCycle(float dutyCycle) {
   exSerial.printf("pump duty cycle: %.2f (%d of %d msec)\n", dutyCycle, pulseMsec, periodMsec);
 }
 
-void incrementDutyCycle() {
+void incrementDutyCycle(float step) {
+  if (step < 0.0) {step = 0.0;}
+  if (step > 1.0) {step = 1.0;}
   float dutyCycle = (float)pulseMsec / (float)periodMsec;
-  dutyCycle = dutyCycle + 0.01;
+  dutyCycle = dutyCycle + step;
   setDutyCycle(dutyCycle);
 }
 
-void decrementDutyCycle() {
+void decrementDutyCycle(float step) {
+  if (step < 0.0) {step = 0.0;}
+  if (step > 1.0) {step = 1.0;}
   float dutyCycle = (float)pulseMsec / (float)periodMsec;
-  dutyCycle = dutyCycle - 0.01;
+  dutyCycle = dutyCycle - step;
   setDutyCycle(dutyCycle);
 }
 
@@ -165,14 +182,14 @@ void startCompressor() {digitalWrite(compressorPin, HIGH); compressorOn = true;}
 void stopCompressor() {digitalWrite(compressorPin, LOW); compressorOn = false;}
 void startHeater() {digitalWrite(heaterPin, HIGH); heaterOn = true;}
 void stopHeater() {digitalWrite(heaterPin, LOW); heaterOn = false;}
-void startPump() {setDutyCycle(0.1); pumpOn = true;}
-void stopPump() {setDutyCycle(0); pumpOn = false;}
+void startPump() {setDutyCycle(dutyMinimum); pumpOn = true;}
+void stopPump() {digitalWrite(pumpPin, LOW); pumpOn = false;}
 
 void calculateOutputs() {
     
-  if (hexInTemp >= 45.0 || hwcBottomTemp >= 45.0) {
+  if (hexInTemp >= 45.0 || hwcBottomTemp >= 50.0) {
     if ( compressorOn || heaterOn) {
-      exSerial.printf("Heat exchanger input too hot, stopping all heaters\n");
+      exSerial.printf("Water too hot, stopping all heaters\n");
       stopCompressor();
       stopHeater();
       stopPump();
@@ -193,7 +210,9 @@ void calculateOutputs() {
   if (hexOutTemp < 62.0 ) {
     exSerial.printf("Heat exchanger output too cold, reducing pump speed\n");
     // shorter bursts of pumping --> less water to heat --> higher temperature 
-    decrementDutyCycle();
+    float tempDiff = 62.0 - hexOutTemp;
+    float dutyStep = tempDiff * 0.01; // 50 Celsius --> 0.5 step
+    decrementDutyCycle(dutyStep);
   }
    
   // if temperature is exactly 62.0 Celsius: do not change 
@@ -201,14 +220,26 @@ void calculateOutputs() {
   if (hexOutTemp > 62.0) {
     exSerial.printf("Heat exchanger output too hot, increasing pump speed\n");
     // longer bursts of pumping --> more water to heat --> lower temperature
-    incrementDutyCycle();
+    float tempDiff = hexOutTemp - 62.0;
+    float dutyStep = tempDiff * 0.01; // 50 Celsius --> 0.5 step
+    incrementDutyCycle(dutyStep);
+    if (hexOutTemp > 70.0) {
+      exSerial.printf("Heat exchanger output too hot, stopping all heaters\n");
+      stopCompressor();
+      stopHeater();
+      stopPump();
+    }
   }
+
+  //setDutyCycle(0.4);
 }
 
 void onEvery(void* context) {
   // first start the pulse, to avoid being affected 
   // by time taken by temperature measurement, printing, etc.
-  timer.pulseImmediate(pumpPin, pulseMsec, LOW);
+  if (pumpOn) {
+    timer.pulseImmediate(pumpPin, pulseMsec, LOW);
+  }
   
   measureTemperatures();
   calculateOutputs();
