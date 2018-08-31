@@ -1,0 +1,3 @@
+
+void measureTemperatures();
+void displayTemperatures();
