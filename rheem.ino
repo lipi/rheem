@@ -16,6 +16,7 @@
 #include <DallasTemperature.h>
 #include <PrintEx.h>
 #include <Timer.h>
+#include <PID_v1.h>
 
 // project files
 #include "constants.h"
@@ -24,22 +25,38 @@
 #include "temperature.h"
 #include "duty.h"
 
+#define REVISION 1
+
 
 PrintEx exSerial = Serial;
 LiquidCrystal lcd( 8, 9, 4, 5, 6, 7 );
 OneWire ow(2);
 DallasTemperature sensors(&ow);
 Timer timer;
+
 int pulseMsec = 0;
 
-float hexInTemp;
-float hexOutTemp;
-float hwcTopTemp;
-float hwcBottomTemp;
+double hexInTemp;
+double hexOutTemp;
+double hwcTopTemp;
+double hwcBottomTemp;
 
 bool pumpOn;
 bool compressorOn;
 bool heaterOn;
+
+double dutyCycle;
+
+double targetTemp = 62.0;
+
+PID pid(&hexOutTemp, // input
+        &dutyCycle, // output
+        &targetTemp, // setpoint
+        kP, kI, kD,
+        P_ON_M,
+        DIRECT);
+
+void onEvery(void* context);
 
 void setup() {
   lcd.begin(16, 2);
@@ -59,8 +76,11 @@ void setup() {
   sensors.setResolution(HWC_BottomAddr, 10);
 
   timer.every(periodMsec, onEvery, NULL);
-}
 
+  // minimum duty cycle is 0.1 to allow measuring exchanger output temperature
+  pid.SetOutputLimits(0.1, 1.0);
+  pid.SetSampleTime(periodMsec);
+}
 
 void startCompressor() {digitalWrite(compressorPin, HIGH); compressorOn = true;}
 void stopCompressor() {digitalWrite(compressorPin, LOW); compressorOn = false;}
@@ -91,31 +111,15 @@ void calculateOutputs() {
     return;
   }
 
-  if (hexOutTemp < 62.0 ) {
-    exSerial.printf("Heat exchanger output too cold, reducing pump speed\n");
-    // shorter bursts of pumping --> less water to heat --> higher temperature 
-    float tempDiff = 62.0 - hexOutTemp;
-    float dutyStep = tempDiff * 0.01; // 50 Celsius --> 0.5 step
-    decrementDutyCycle(dutyStep);
-  }
-   
-  // if temperature is exactly 62.0 Celsius: do not change 
-  
-  if (hexOutTemp > 62.0) {
-    exSerial.printf("Heat exchanger output too hot, increasing pump speed\n");
-    // longer bursts of pumping --> more water to heat --> lower temperature
-    float tempDiff = hexOutTemp - 62.0;
-    float dutyStep = tempDiff * 0.01; // 50 Celsius --> 0.5 step
-    incrementDutyCycle(dutyStep);
-    if (hexOutTemp > 70.0) {
-      exSerial.printf("Heat exchanger output too hot, stopping all heaters\n");
-      stopCompressor();
-      stopHeater();
-      stopPump();
-    }
-  }
+  pid.Compute();
 
-  //setDutyCycle(0.4);
+  // safety override
+  if (hexOutTemp > 70.0) {
+    exSerial.printf("Heat exchanger output too hot, stopping all heaters\n");
+    stopCompressor();
+    stopHeater();
+    stopPump();
+  }
 }
 
 void onEvery(void* context) {
@@ -127,9 +131,10 @@ void onEvery(void* context) {
   
   measureTemperatures();
   displayTemperatures();
-  displayDuty();
 
   calculateOutputs();
+
+  displayDuty();
 }
 
 void loop() {
