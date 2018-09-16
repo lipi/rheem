@@ -49,12 +49,16 @@ double dutyCycle;
 
 double targetTemp = 62.0;
 
-PID pid(&hexOutTemp, // input
-        &dutyCycle, // output
-        &targetTemp, // setpoint
-        kP, kI, kD,
-        P_ON_M,
-        DIRECT);
+double kP = 0.0;
+double kI = 0.0;
+double kD = 0.0;
+
+//PID pid(&hexOutTemp, // input
+//        &dutyCycle, // output
+//        &targetTemp, // setpoint
+//        kP, kI, kD,
+//        P_ON_M,
+//        DIRECT);
 
 void onEvery(void* context);
 
@@ -78,16 +82,18 @@ void setup() {
   timer.every(periodMsec, onEvery, NULL);
 
   // minimum duty cycle is 0.1 to allow measuring exchanger output temperature
-  pid.SetOutputLimits(0.1, 1.0);
-  pid.SetSampleTime(periodMsec);
+  //pid.SetOutputLimits(0.1, 1.0);
+  //pid.SetSampleTime(periodMsec);
+
+  startHeater(); // heater manual start after boot
 }
 
 void startCompressor() {digitalWrite(compressorPin, HIGH); compressorOn = true;}
 void stopCompressor() {digitalWrite(compressorPin, LOW); compressorOn = false;}
-void startHeater() {digitalWrite(heaterPin, HIGH); heaterOn = true;}
-void stopHeater() {digitalWrite(heaterPin, LOW); heaterOn = false;}
+void startHeater() {digitalWrite(heaterPin, LOW); heaterOn = true;}
+void stopHeater() {digitalWrite(heaterPin, HIGH); heaterOn = false;}
 void startPump() {setDutyCycle(dutyMinimum); pumpOn = true;}
-void stopPump() {digitalWrite(pumpPin, LOW); pumpOn = false;}
+void stopPump() {digitalWrite(pumpPin, HIGH); pumpOn = false;}
 
 void calculateOutputs() {
     
@@ -111,7 +117,7 @@ void calculateOutputs() {
     return;
   }
 
-  pid.Compute();
+  //pid.Compute();
 
   // safety override
   if (hexOutTemp > 70.0) {
@@ -137,7 +143,27 @@ void onEvery(void* context) {
   displayDuty();
 }
 
+void getParameters() {
+  char type = Serial.read();
+  float value = Serial.parseFloat();
+  exSerial.printf("%c = %.3f\n", type, value);
+  switch (type) {
+    case 'p': kP = (double)value; break;
+    case 'i': kI = (double)value; break;
+    case 'd': kD = (double)value; break;
+    default:
+      exSerial.printf("Error: %c is not a valid parameter\n", type);
+      return;
+  }
+  //pid.SetTunings(kP, kI, kD);
+  exSerial.printf("kP = %.3f kI = %.3f kD = %.3f\n", kP, kI, kD);
+}
+
 void loop() {
   timer.update();
+
+  if (Serial.available() > 0) {
+    getParameters();
+  }
 }
 
