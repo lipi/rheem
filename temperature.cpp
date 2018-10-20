@@ -17,12 +17,21 @@ extern float hwcTopTemp;
 extern float hwcBottomTemp;
 
 bool sane(double temperature) {
-  return (temperature > 0.0 && temperature < 100.0);
+  //return (temperature > 0.0 && temperature < 100.0);
+  return true;
 }
 
 void measureTemperatures() {
-  int samples = 5;
-  
+    sensors.requestTemperatures();
+
+    hexInTemp = sensors.getTempC(HeatExInAddr); 
+    hexOutTemp = sensors.getTempC(HeatExOutAddr);
+    hwcTopTemp = sensors.getTempC(HWC_TopAddr);
+    hwcBottomTemp = sensors.getTempC(HWC_BottomAddr);
+}
+
+// warning: will block indefinitely if any sensor is offline
+void measureFilteredTemperatures(int samples) {
   hexInTemp = 0.0;
   hexOutTemp = 0.0;
   hwcTopTemp = 0.0;
@@ -54,6 +63,7 @@ void measureTemperatures() {
 }
 
 void displayTemperatures() {
+  exSerial.printf("%.3f ", millis()/1000.0);
   exSerial.printf("HEX in/out: %.2f/%.2f C ", hexInTemp, hexOutTemp);
   exSerial.printf("HWC top/bottom: %.2f/%.2f C\n", hwcTopTemp, hwcBottomTemp);
 

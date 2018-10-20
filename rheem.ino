@@ -34,7 +34,7 @@ OneWire ow(2);
 DallasTemperature sensors(&ow);
 Timer timer;
 
-int pulseMsec = 0;
+unsigned int pulseMsec = 0;
 
 double hexInTemp;
 double hexOutTemp;
@@ -45,20 +45,19 @@ bool pumpOn;
 bool compressorOn;
 bool heaterOn;
 
-double dutyCycle;
-
-double targetTemp = 62.0;
-
-double kP = 0.0;
+// PID variables
+double dutyCycle = 0.5; // start at the middle
+double targetTemp = 28.0; //62.0;
+double kP = 0.0; // 0.0 disables the component
 double kI = 0.0;
 double kD = 0.0;
 
-//PID pid(&hexOutTemp, // input
-//        &dutyCycle, // output
-//        &targetTemp, // setpoint
-//        kP, kI, kD,
-//        P_ON_M,
-//        DIRECT);
+PID pid(&hexOutTemp, // input
+        &dutyCycle, // output
+        &targetTemp, // setpoint
+        kP, kI, kD,
+        P_ON_E,
+        REVERSE);
 
 void onEvery(void* context);
 
@@ -78,14 +77,16 @@ void setup() {
   sensors.setResolution(HeatExOutAddr, 10);
   sensors.setResolution(HWC_TopAddr, 10);
   sensors.setResolution(HWC_BottomAddr, 10);
+  sensors.setWaitForConversion(false);
 
   timer.every(periodMsec, onEvery, NULL);
 
   // minimum duty cycle is 0.1 to allow measuring exchanger output temperature
-  //pid.SetOutputLimits(0.1, 1.0);
-  //pid.SetSampleTime(periodMsec);
-
-  startHeater(); // heater manual start after boot
+  pid.SetOutputLimits(dutyMinimum, dutyMaximum);
+  pid.SetSampleTime(periodMsec);
+  pid.SetMode(AUTOMATIC);
+  
+  //startHeater(); // heater manual start after boot
 }
 
 void startCompressor() {digitalWrite(compressorPin, HIGH); compressorOn = true;}
@@ -117,7 +118,8 @@ void calculateOutputs() {
     return;
   }
 
-  //pid.Compute();
+  pid.Compute();
+  setDutyCycle(dutyCycle);
 
   // safety override
   if (hexOutTemp > 70.0) {
@@ -129,12 +131,13 @@ void calculateOutputs() {
 }
 
 void onEvery(void* context) {
+
   // first start the pulse, to avoid being affected 
   // by time taken by temperature measurement, printing, etc.
   if (pumpOn) {
     timer.pulseImmediate(pumpPin, pulseMsec, LOW);
   }
-  
+
   measureTemperatures();
   displayTemperatures();
 
@@ -151,12 +154,13 @@ void getParameters() {
     case 'p': kP = (double)value; break;
     case 'i': kI = (double)value; break;
     case 'd': kD = (double)value; break;
+    case 't': targetTemp = (double)value; break;
     default:
       exSerial.printf("Error: %c is not a valid parameter\n", type);
       return;
   }
-  //pid.SetTunings(kP, kI, kD);
-  exSerial.printf("kP = %.3f kI = %.3f kD = %.3f\n", kP, kI, kD);
+  pid.SetTunings(kP, kI, kD);
+  exSerial.printf("kP = %.3f kI = %.3f kD = %.3f target: %.1f C\n", kP, kI, kD, targetTemp);
 }
 
 void loop() {
