@@ -46,11 +46,11 @@ bool compressorOn;
 bool heaterOn;
 
 // PID variables
-double dutyCycle = 0.5; // start at the middle
-double targetTemp = 28.0; //62.0;
-double kP = 0.0; // 0.0 disables the component
-double kI = 0.0;
-double kD = 0.0;
+double dutyCycle = 0.2; // start at the middle
+double targetTemp = 55.0;
+double kP = 0.1; // 0.0 disables the component
+double kI = 0.01;
+double kD = 0.5;
 
 PID pid(&hexOutTemp, // input
         &dutyCycle, // output
@@ -155,6 +155,8 @@ void getParameters() {
     case 'i': kI = (double)value; break;
     case 'd': kD = (double)value; break;
     case 't': targetTemp = (double)value; break;
+    case '?': break; // print current values
+    case 'h': break; // print current values
     default:
       exSerial.printf("Error: %c is not a valid parameter\n", type);
       return;
