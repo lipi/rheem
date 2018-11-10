@@ -20,7 +20,6 @@
 
 // project files
 #include "constants.h"
-#include "parameters.h"
 #include "selftest.h"
 #include "temperature.h"
 #include "duty.h"

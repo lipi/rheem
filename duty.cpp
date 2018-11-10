@@ -2,7 +2,7 @@
 #include <LiquidCrystal.h>
 #include <PrintEx.h>
 
-#include "parameters.h"
+#include "constants.h"
 
 extern LiquidCrystal lcd;
 extern PrintEx exSerial;
