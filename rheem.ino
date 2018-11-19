@@ -198,6 +198,13 @@ void onEvery(void* context) {
   measureTemperatures();
   displayTemperatures();
 
+  if ( hexInTemp < 0 || hexOutTemp < 0 || hwcBottomTemp < 0 || hwcTopTemp < 0) {
+    // likely sensor error (-127C), so stop everything
+    // TODO: display error code
+    stopAllHeaters();
+    return;
+  }
+
   calculateOutputs();
 
   displayDuty();
