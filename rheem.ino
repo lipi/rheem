@@ -41,12 +41,21 @@ double hwcTopTemp;
 double hwcBottomTemp;
 
 bool pumpOn;
-bool compressorOn;
 bool heaterOn;
 
+// helpers to implement recycle time for compressor
+unsigned int compressorStopTime = millis();
+int recycleEvent = NO_TIMER_AVAILABLE;
+enum State {
+  stopped,
+  starting,
+  started
+};
+State compressorState = stopped;
+
 // PID variables
-double dutyCycle = 0.2; // start at the middle
-double targetTemp = 55.0;
+double dutyCycle = dutyMinimum;
+double targetTemp = targetTemperature;
 double kP = 0.1; // 0.0 disables the component
 double kI = 0.01;
 double kD = 0.5;
@@ -59,6 +68,7 @@ PID pid(&hexOutTemp, // input
         REVERSE);
 
 void onEvery(void* context);
+void recycleCallback(void* context);
 
 void setup() {
   lcd.begin(16, 2);
@@ -68,7 +78,8 @@ void setup() {
   pinMode(pumpPin, OUTPUT);
   pinMode(compressorPin, OUTPUT);
   pinMode(heaterPin, OUTPUT);  
-  
+
+  // uncomment following line to find sensor addresses and test outputs
   //selfTest();
 
   sensors.begin();
@@ -80,36 +91,88 @@ void setup() {
 
   timer.every(periodMsec, onEvery, NULL);
 
-  // minimum duty cycle is 0.1 to allow measuring exchanger output temperature
   pid.SetOutputLimits(dutyMinimum, dutyMaximum);
   pid.SetSampleTime(periodMsec);
   pid.SetMode(AUTOMATIC);
-  
-  //startHeater(); // heater manual start after boot
+
+  stopPump();
+  stopCompressor();
+  stopHeater();
 }
 
-void startCompressor() {digitalWrite(compressorPin, HIGH); compressorOn = true;}
-void stopCompressor() {digitalWrite(compressorPin, LOW); compressorOn = false;}
+void startCompressor() {
+  if (stopped == compressorState) {
+    if (compressorStopTime + recycleTimeMsec < millis() ) {
+      digitalWrite(compressorPin, HIGH);
+      exSerial.printf("Compressor started\n");
+      compressorState = started;
+    }
+    else {
+      int holdoff = recycleTimeMsec - (millis() - compressorStopTime);
+      recycleEvent = timer.after(holdoff, recycleCallback, NULL);
+      compressorState = starting;
+      exSerial.printf("Compressor starting\n");
+    }
+  }
+  else {
+    // nothing to do
+  }
+}
+
+void recycleCallback(void* context) {
+  digitalWrite(compressorPin, HIGH);
+  compressorState = started; 
+  exSerial.printf("Compressor started\n");
+}
+
+void stopCompressor() {
+  if (stopped != compressorState) {
+    digitalWrite(compressorPin, LOW);
+    compressorState = stopped;
+    compressorStopTime = millis();
+    if (recycleEvent >= 0) {
+      recycleEvent = timer.stop(recycleEvent);
+    }
+    exSerial.printf("Compressor stopped\n");
+  }
+}
+  
 void startHeater() {digitalWrite(heaterPin, LOW); heaterOn = true;}
 void stopHeater() {digitalWrite(heaterPin, HIGH); heaterOn = false;}
 void startPump() {setDutyCycle(dutyMinimum); pumpOn = true;}
-void stopPump() {digitalWrite(pumpPin, HIGH); pumpOn = false;}
+void stopPump() {digitalWrite(pumpPin, HIGH); pumpOn = false; pulseMsec = 0;}
 
-void calculateOutputs() {
-    
-  if (hexInTemp >= 45.0 || hwcBottomTemp >= 50.0) {
-    if ( compressorOn || heaterOn) {
-      exSerial.printf("Water too hot, stopping all heaters\n");
+void stopAllHeaters() {
+      exSerial.printf("Stopping all heaters\n");
       stopCompressor();
       stopHeater();
       stopPump();
+}
+
+void calculateOutputs() {
+    
+  if (hexInTemp >= hexInTempMax || hwcBottomTemp >= hwcBottomTempMax ) {
+    exSerial.printf("Cylinder water too hot\n");
+    if ( compressorState != stopped || heaterOn) {
+      stopAllHeaters();
     }
 
     // too hot, nothing to do
     return;
   }
 
-  if (hwcBottomTemp < 45.0 && !compressorOn) {
+  // safety override
+  if (hexOutTemp > hexOutTempMax ) {
+    exSerial.printf("Heat exchanger output too hot\n");
+    if (compressorState != stopped || heaterOn) {
+      stopAllHeaters();
+    }
+  
+    // too hot, nothing to do
+    return;
+  }
+
+  if (hwcBottomTemp < hwcBottomTempMin && stopped == compressorState) {
     exSerial.printf("Hot-water cylinder bottom too cold, starting compressor\n");
     startCompressor(); // will take a while to start heating...
     //TODO: start heater if ambient temperature low
@@ -117,15 +180,10 @@ void calculateOutputs() {
     return;
   }
 
-  pid.Compute();
-  setDutyCycle(dutyCycle);
-
-  // safety override
-  if (hexOutTemp > 70.0) {
-    exSerial.printf("Heat exchanger output too hot, stopping all heaters\n");
-    stopCompressor();
-    stopHeater();
-    stopPump();
+  pid.Compute(); // where all the magic happens...
+  
+  if (started == compressorState) {
+    setDutyCycle(dutyCycle);
   }
 }
 
