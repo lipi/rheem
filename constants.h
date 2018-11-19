@@ -12,7 +12,7 @@
 #define REVISION 1
 
 // uncomment following line if using different set of sensors for testing
-#define TESTING
+//#define TESTING
 
 #ifdef TESTING
 const DeviceAddress HeatExInAddr = { 0x28, 0xFF, 0xD2, 0x6C, 0xC1, 0x16, 0x04, 0xC8 };
