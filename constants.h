@@ -9,7 +9,7 @@
 // These constants are not meant to be changed, unless the harddware or wiring changes
 //
 
-#define REVISION 1
+#define REVISION 20181124
 
 // uncomment following line if using different set of sensors for testing
 //#define TESTING
