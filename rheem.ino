@@ -44,7 +44,7 @@ bool pumpOn;
 bool heaterOn;
 
 // helpers to implement recycle time for compressor
-unsigned int compressorStopTime = millis();
+unsigned long compressorStopTime = millis();
 int recycleEvent = NO_TIMER_AVAILABLE;
 enum State {
   stopped,
@@ -108,7 +108,7 @@ void startCompressor() {
       compressorState = started;
     }
     else {
-      int holdoff = recycleTimeMsec - (millis() - compressorStopTime);
+      unsigned long holdoff = recycleTimeMsec - (millis() - compressorStopTime);
       recycleEvent = timer.after(holdoff, recycleCallback, NULL);
       compressorState = starting;
       exSerial.printf("Compressor starting\n");
@@ -197,14 +197,14 @@ void onEvery(void* context) {
 
   measureTemperatures();
   displayTemperatures();
-
+#if 0
   if ( hexInTemp < 0 || hexOutTemp < 0 || hwcBottomTemp < 0 || hwcTopTemp < 0) {
     // likely sensor error (-127C), so stop everything
     // TODO: display error code
     stopAllHeaters();
     return;
   }
-
+#endif
   calculateOutputs();
 
   displayDuty();
