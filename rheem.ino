@@ -97,7 +97,7 @@ void setup() {
 
   stopPump();
   stopCompressor();
-  stopHeater();
+  selectCompressor();
 }
 
 void startCompressor() {
@@ -137,15 +137,14 @@ void stopCompressor() {
   }
 }
   
-void startHeater() {digitalWrite(heaterPin, LOW); heaterOn = true;}
-void stopHeater() {digitalWrite(heaterPin, HIGH); heaterOn = false;}
+void selectCompressor() {digitalWrite(heaterPin, LOW); heaterOn = true;}
+void selectHeater() {digitalWrite(heaterPin, HIGH); heaterOn = false;}
 void startPump() {setDutyCycle(dutyMinimum); pumpOn = true;}
 void stopPump() {digitalWrite(pumpPin, HIGH); pumpOn = false; pulseMsec = 0;}
 
 void stopAllHeaters() {
       exSerial.printf("Stopping all heaters\n");
       stopCompressor();
-      stopHeater();
       stopPump();
 }
 

@@ -9,7 +9,7 @@
 // These constants are not meant to be changed, unless the harddware or wiring changes
 //
 
-#define REVISION 20181124
+#define REVISION 20181212
 
 // uncomment following line if using different set of sensors for testing
 //#define TESTING
@@ -20,7 +20,7 @@ const DeviceAddress HeatExOutAddr = { 0x28, 0xFF, 0x6A, 0x93, 0xB5, 0x16, 0x03, 
 const DeviceAddress HWC_TopAddr = { 0x28, 0xFF, 0xE6, 0x6C, 0xC1, 0x16, 0x04, 0x53 };
 const DeviceAddress HWC_BottomAddr = { 0x28, 0xFF, 0x49, 0x23, 0xB5, 0x16, 0x05, 0x5A };
 
-const unsigned long recycleTimeMsec = 2 * 60 * 1000L;
+const unsigned long recycleTimeMsec = 10 * 1000L;
 const double targetTemperature = 30.0;
 const double hwcBottomTempMax = 30.0;
 const double hwcBottomTempMin = 28.0;
