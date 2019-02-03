@@ -77,7 +77,7 @@ void setup() {
 
   pinMode(pumpPin, OUTPUT);
   pinMode(compressorPin, OUTPUT);
-  pinMode(heaterPin, OUTPUT);  
+  pinMode(selectorPin, OUTPUT);  
 
   // uncomment following line to find sensor addresses and test outputs
   //selfTest();
@@ -103,7 +103,7 @@ void setup() {
 void startCompressor() {
   if (stopped == compressorState) {
     if (compressorStopTime + recycleTimeMsec < millis() ) {
-      digitalWrite(compressorPin, HIGH);
+      digitalWrite(compressorPin, LOW);
       exSerial.printf("Compressor started\n");
       compressorState = started;
     }
@@ -120,14 +120,14 @@ void startCompressor() {
 }
 
 void recycleCallback(void* context) {
-  digitalWrite(compressorPin, HIGH);
+  digitalWrite(compressorPin, LOW);
   compressorState = started; 
-  exSerial.printf("Compressor started\n");
+  exSerial.printf("Compressor started after recycle delay\n");
 }
 
 void stopCompressor() {
+  digitalWrite(compressorPin, HIGH);
   if (stopped != compressorState) {
-    digitalWrite(compressorPin, LOW);
     compressorState = stopped;
     compressorStopTime = millis();
     if (recycleEvent >= 0) {
@@ -137,8 +137,8 @@ void stopCompressor() {
   }
 }
   
-void selectCompressor() {digitalWrite(heaterPin, LOW); heaterOn = true;}
-void selectHeater() {digitalWrite(heaterPin, HIGH); heaterOn = false;}
+void selectCompressor() {digitalWrite(selectorPin, LOW); heaterOn = false;}
+void selectHeater() {digitalWrite(selectorPin, HIGH); heaterOn = true;}
 void startPump() {setDutyCycle(dutyMinimum); pumpOn = true;}
 void stopPump() {digitalWrite(pumpPin, HIGH); pumpOn = false; pulseMsec = 0;}
 

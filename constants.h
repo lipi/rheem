@@ -37,17 +37,17 @@ const DeviceAddress HWC_TopAddr = { 0x28, 0xFF, 0x56, 0xE9, 0x70, 0x17, 0x03, 0x
 const DeviceAddress HWC_BottomAddr = { 0x28, 0xFF, 0x70, 0x20, 0x71, 0x17, 0x03, 0x71 }; // A1-3
 
 const unsigned long recycleTimeMsec = 5 * 60 * 1000L; // 5 minutes
-const double targetTemperature = 55.0;
+const double targetTemperature = 58.0;
 const double hwcBottomTempMax = 50.0;
 const double hwcBottomTempMin = 45.0;
-const double hexInTempMax = 45.0;
+const double hexInTempMax = 37; // 45.0;
 const double hexOutTempMax = 70.0;
 
 #endif
 
 // outputs
-const int heaterPin = 3;      // relay
-const int compressorPin = 10; // relay
+const int selectorPin = 10;   // relay
+const int compressorPin = 3;  // relay
 const int pumpPin = 13;       // solid-state relay
 
 const float dutyMinimum = 0.2; // keep water flowing so temperature can be measured

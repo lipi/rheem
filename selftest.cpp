@@ -33,10 +33,10 @@ uint8_t findDevices(OneWire ow) {
 
 void testOutput(int pin, const char* name) {
   exSerial.printf("Testing %s: on for 1 second\n", name);
-  digitalWrite(pin, HIGH);
+  digitalWrite(pin, LOW);
   delay(1000);
   exSerial.printf("Testing %s: off for 1 second\n", name);
-  digitalWrite(pin, LOW);
+  digitalWrite(pin, HIGH);
   delay(1000);
 }
 
@@ -59,5 +59,5 @@ void selfTest() {
   // test 3: relays
   testOutput(pumpPin, "LED");
   testOutput(compressorPin, "compressor relay");
-  testOutput(heaterPin, "heater relay");
+  testOutput(selectorPin, "selector relay");
 }
